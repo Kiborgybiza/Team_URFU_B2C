@@ -13,7 +13,10 @@ from src.database import get_db
 from src.deps import get_jwt_user_id
 from src.models import Order
 from src.services.order_service import (
+    OrderCancelError,
     OrderConflictError,
+    OrderNotFoundError,
+    cancel_order,
     checkout,
 )
 
@@ -78,3 +81,21 @@ def create_order(
     except B2BUnavailableError:
         return JSONResponse(status_code=503, content={"code": "B2B_UNAVAILABLE", "message": "B2B service unavailable"})
     return JSONResponse(status_code=201, content=_order_out(order))
+
+
+@router.post("/api/v1/orders/{order_id}/cancel")
+def cancel(
+    order_id: uuid.UUID,
+    user_id: uuid.UUID | JSONResponse = Depends(get_jwt_user_id),
+    db: Session = Depends(get_db),
+    b2b: B2BClient = Depends(get_b2b_client),
+):
+    if isinstance(user_id, JSONResponse):
+        return user_id
+    try:
+        order = cancel_order(db, order_id, user_id, b2b)
+    except OrderNotFoundError:
+        return JSONResponse(status_code=404, content={"code": "NOT_FOUND", "message": "Order not found"})
+    except OrderCancelError as e:
+        return JSONResponse(status_code=409, content={"code": "CANCEL_NOT_ALLOWED", "message": str(e)})
+    return _order_out(order)
