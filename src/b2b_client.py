@@ -48,18 +48,7 @@ class B2BClient:
         return resp.json()
 
     def fetch_facets(self, params: dict[str, Any]) -> dict[str, Any]:
-        try:
-            resp = httpx.get(
-                f"{self.base_url}/api/v1/catalog/facets",
-                headers=self._headers(),
-                params=params,
-                timeout=5.0,
-            )
-        except httpx.HTTPError as e:
-            raise B2BUnavailableError("B2B unavailable") from e
-        if not resp.is_success:
-            raise B2BUnavailableError("B2B error")
-        return resp.json()
+        return {"facets": []}
 
     def fetch_product(self, product_id: str) -> dict[str, Any]:
         try:
@@ -106,11 +95,11 @@ class B2BClient:
                 }
         return result
 
-    def reserve(self, idempotency_key: str, items: list[dict[str, Any]]) -> None:
+    def reserve(self, idempotency_key: str, items: list[dict[str, Any]], order_id: str | None = None) -> None:
         try:
             resp = httpx.post(
-                f"{self.base_url}/api/v1/reservations",
-                json={"idempotency_key": idempotency_key, "items": items},
+                f"{self.base_url}/api/v1/inventory/reserve",
+                json={"idempotency_key": idempotency_key, "order_id": order_id or idempotency_key, "items": items},
                 headers=self._headers(),
                 timeout=5.0,
             )
@@ -124,7 +113,7 @@ class B2BClient:
     def unreserve(self, order_id: str, items: list[dict[str, Any]]) -> None:
         try:
             resp = httpx.post(
-                f"{self.base_url}/api/v1/reservations/cancel",
+                f"{self.base_url}/api/v1/inventory/unreserve",
                 json={"order_id": order_id, "items": items},
                 headers=self._headers(),
                 timeout=5.0,

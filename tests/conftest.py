@@ -98,7 +98,7 @@ class FakeB2BClient(B2BClient):
                 }
         return result
 
-    def reserve(self, idempotency_key: str, items: list[dict[str, Any]]) -> None:
+    def reserve(self, idempotency_key: str, items: list[dict[str, Any]], order_id: str | None = None) -> None:
         self.reserve_calls.append({"idempotency_key": idempotency_key, "items": items})
         if self.b2b_unavailable:
             raise B2BUnavailableError("B2B unavailable")

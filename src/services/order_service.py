@@ -29,7 +29,7 @@ def _hash_cart(items: list[dict[str, Any]]) -> str:
     return hashlib.sha256(json.dumps(normalized, sort_keys=True).encode()).hexdigest()
 
 
-CANCELLABLE_STATUSES = {"PAID"}
+CANCELLABLE_STATUSES = {"CREATED", "PAID", "ASSEMBLING", "DELIVERING"}
 
 
 def checkout(
@@ -75,14 +75,16 @@ def checkout(
     subtotal = sum(d["line_total"] for d in order_items_data)
 
     reserve_items = [{"sku_id": d["sku_id"], "quantity": d["quantity"]} for d in order_items_data]
+    order_id = uuid.uuid4()
     try:
-        b2b.reserve(str(idempotency_key), reserve_items)
+        b2b.reserve(str(idempotency_key), reserve_items, order_id=str(order_id))
     except B2BReserveConflictError as e:
         raise OrderConflictError("Partial reserve failure") from e
     except B2BUnavailableError:
         raise
 
     order = Order(
+        id=order_id,
         buyer_id=buyer_id,
         idempotency_key=idempotency_key,
         request_hash=request_hash,
