@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -24,7 +24,6 @@ router = APIRouter(tags=["Orders"])
 
 
 class CheckoutRequest(BaseModel):
-    idempotency_key: uuid.UUID
     address_id: uuid.UUID | None = None
     payment_method_id: uuid.UUID | None = None
 
@@ -38,7 +37,7 @@ def _order_out(order: Order) -> dict[str, Any]:
         "delivery_cost": order.delivery_cost,
         "total": order.total,
         "idempotency_key": str(order.idempotency_key),
-        "address_id": str(order.address_id) if order.address_id else None,
+        "address": {"id": str(order.address_id)} if order.address_id else None,
         "payment_method_id": str(order.payment_method_id) if order.payment_method_id else None,
         "created_at": order.created_at.isoformat(),
         "items": [
@@ -46,7 +45,7 @@ def _order_out(order: Order) -> dict[str, Any]:
                 "id": str(item.id),
                 "sku_id": str(item.sku_id),
                 "product_id": str(item.product_id),
-                "product_title": item.product_title,
+                "name": item.product_title,
                 "sku_name": item.sku_name,
                 "quantity": item.quantity,
                 "unit_price": item.unit_price,
@@ -61,17 +60,30 @@ def _order_out(order: Order) -> dict[str, Any]:
 @router.post("/api/v1/orders", status_code=201)
 def create_order(
     request: CheckoutRequest,
+    idempotency_key_header: str | None = Header(default=None, alias="Idempotency-Key"),
     user_id: uuid.UUID | JSONResponse = Depends(get_jwt_user_id),
     db: Session = Depends(get_db),
     b2b: B2BClient = Depends(get_b2b_client),
 ):
     if isinstance(user_id, JSONResponse):
         return user_id
+    if idempotency_key_header is None:
+        return JSONResponse(
+            status_code=400,
+            content={"code": "MISSING_IDEMPOTENCY_KEY", "message": "Idempotency-Key header is required"},
+        )
+    try:
+        idempotency_key = uuid.UUID(idempotency_key_header)
+    except ValueError:
+        return JSONResponse(
+            status_code=400,
+            content={"code": "INVALID_IDEMPOTENCY_KEY", "message": "Idempotency-Key must be a valid UUID"},
+        )
     try:
         order = checkout(
             db,
             buyer_id=user_id,
-            idempotency_key=request.idempotency_key,
+            idempotency_key=idempotency_key,
             address_id=request.address_id,
             payment_method_id=request.payment_method_id,
             b2b=b2b,

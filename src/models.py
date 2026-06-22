@@ -36,7 +36,7 @@ class CartItem(Base):
     user_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True, index=True)
     session_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     sku_id: Mapped[uuid.UUID] = mapped_column(GUID, nullable=False)
-    product_id: Mapped[uuid.UUID] = mapped_column(GUID, nullable=False)
+    product_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
     quantity: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(default=_now)
     updated_at: Mapped[datetime] = mapped_column(default=_now, onupdate=_now)

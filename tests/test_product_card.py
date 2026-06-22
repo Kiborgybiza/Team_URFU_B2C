@@ -16,7 +16,7 @@ def test_product_card_returns_full_data_with_skus(client, fake_b2b):
         ],
     })
 
-    response = client.get(f"/api/v1/products/{product_id}")
+    response = client.get(f"/api/v1/catalog/products/{product_id}")
 
     assert response.status_code == 200
     data = response.json()
@@ -45,7 +45,7 @@ def test_cost_price_absent_in_response(client, fake_b2b):
         ],
     })
 
-    response = client.get(f"/api/v1/products/{product_id}")
+    response = client.get(f"/api/v1/catalog/products/{product_id}")
 
     assert response.status_code == 200
     body = response.json()
@@ -58,7 +58,7 @@ def test_blocked_product_returns_404(client, fake_b2b):
     product_id = str(uuid4())
     fake_b2b.block_product(product_id)
 
-    response = client.get(f"/api/v1/products/{product_id}")
+    response = client.get(f"/api/v1/catalog/products/{product_id}")
 
     assert response.status_code == 404
     assert response.json()["code"] == "NOT_FOUND"

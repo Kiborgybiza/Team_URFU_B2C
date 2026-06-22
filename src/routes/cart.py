@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from fastapi import APIRouter, Depends, Header
 from fastapi.responses import JSONResponse
@@ -22,8 +23,19 @@ router = APIRouter(tags=["Cart"])
 
 class AddItemRequest(BaseModel):
     sku_id: uuid.UUID
-    product_id: uuid.UUID
+    product_id: uuid.UUID | None = None
     quantity: int = 1
+
+
+def _cart_response(enriched: list[dict[str, Any]]) -> dict[str, Any]:
+    items_count = sum(item["quantity"] for item in enriched)
+    subtotal = sum(
+        item["unit_price"] * item["quantity"]
+        for item in enriched
+        if item["is_available"] and item["unit_price"] is not None
+    )
+    is_valid = all(item["is_available"] for item in enriched) if enriched else True
+    return {"items": enriched, "items_count": items_count, "subtotal": subtotal, "is_valid": is_valid}
 
 
 @router.get("/api/v1/cart")
@@ -33,7 +45,7 @@ def get_cart(
     b2b: B2BClient = Depends(get_b2b_client),
 ):
     items = get_items_for_identity(db, identity)
-    return {"items": enrich_cart(items, b2b)}
+    return _cart_response(enrich_cart(items, b2b))
 
 
 @router.post("/api/v1/cart/items", status_code=201)
@@ -50,7 +62,7 @@ def add_cart_item(
         )
     add_item(db, identity, request.sku_id, request.product_id, request.quantity)
     items = get_items_for_identity(db, identity)
-    return {"items": enrich_cart(items, b2b)}
+    return _cart_response(enrich_cart(items, b2b))
 
 
 @router.post("/api/v1/cart/merge")
@@ -68,4 +80,4 @@ def merge_cart(
             content={"code": "SESSION_REQUIRED", "message": "X-Session-Id header is required"},
         )
     items = merge_guest_cart(db, user_id, x_session_id)
-    return {"items": enrich_cart(items, b2b)}
+    return _cart_response(enrich_cart(items, b2b))

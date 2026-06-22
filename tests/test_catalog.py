@@ -19,7 +19,7 @@ def test_catalog_returns_filtered_sorted_products(client, fake_b2b):
     p2 = _product(price=1500)
     fake_b2b.set_catalog_response([p1, p2])
 
-    response = client.get("/api/v1/products", params={"sort": "price_asc"})
+    response = client.get("/api/v1/catalog/products", params={"sort": "price_asc"})
 
     assert response.status_code == 200
     data = response.json()
@@ -55,7 +55,7 @@ def test_facets_return_counts_per_filter_value(client, fake_b2b):
 
 
 def test_invalid_sort_returns_400(client, fake_b2b):
-    response = client.get("/api/v1/products", params={"sort": "random_garbage"})
+    response = client.get("/api/v1/catalog/products", params={"sort": "random_garbage"})
 
     assert response.status_code == 400
     assert response.json()["code"] == "INVALID_SORT"
@@ -64,7 +64,7 @@ def test_invalid_sort_returns_400(client, fake_b2b):
 def test_b2b_unavailable_returns_502(client, fake_b2b):
     fake_b2b.catalog_unavailable = True
 
-    response = client.get("/api/v1/products")
+    response = client.get("/api/v1/catalog/products")
 
     assert response.status_code == 502
     assert response.json()["code"] == "B2B_UNAVAILABLE"

@@ -25,7 +25,7 @@ def add_item(
     db: Session,
     identity: CartIdentity,
     sku_id: uuid.UUID,
-    product_id: uuid.UUID,
+    product_id: uuid.UUID | None,
     quantity: int = 1,
 ) -> CartItem:
     existing: CartItem | None = None
@@ -82,7 +82,7 @@ def merge_guest_cart(db: Session, user_id: uuid.UUID, session_id: str) -> list[C
 def enrich_cart(items: list[CartItem], b2b: B2BClient) -> list[dict[str, Any]]:
     if not items:
         return []
-    product_ids = list({str(item.product_id) for item in items})
+    product_ids = list({str(item.product_id) for item in items if item.product_id is not None})
     try:
         sku_map = b2b.fetch_skus_by_product(product_ids)
     except B2BUnavailableError:
@@ -91,30 +91,34 @@ def enrich_cart(items: list[CartItem], b2b: B2BClient) -> list[dict[str, Any]]:
     result = []
     for item in items:
         sku_data = sku_map.get(str(item.sku_id))
+        pid = str(item.product_id) if item.product_id is not None else None
         if sku_data is None:
             result.append({
                 "sku_id": str(item.sku_id),
-                "product_id": str(item.product_id),
+                "product_id": pid,
+                "name": None,
                 "quantity": item.quantity,
-                "available": False,
+                "unit_price": None,
+                "line_total": None,
+                "available_quantity": 0,
+                "is_available": False,
                 "unavailable_reason": "PRODUCT_NOT_FOUND",
-                "product_title": None,
-                "sku_name": None,
-                "price": None,
                 "image_url": None,
             })
         else:
-            active_qty = sku_data.get("active_quantity") or 0
-            available = int(active_qty) > 0
+            active_qty = int(sku_data.get("active_quantity") or 0)
+            is_available = active_qty > 0
+            unit_price = sku_data.get("price")
             result.append({
                 "sku_id": str(item.sku_id),
-                "product_id": str(item.product_id),
+                "product_id": pid,
+                "name": sku_data.get("product_title"),
                 "quantity": item.quantity,
-                "available": available,
-                "unavailable_reason": "OUT_OF_STOCK" if not available else None,
-                "product_title": sku_data.get("product_title"),
-                "sku_name": sku_data.get("name"),
-                "price": sku_data.get("price"),
+                "unit_price": unit_price,
+                "line_total": unit_price * item.quantity if unit_price is not None else None,
+                "available_quantity": active_qty,
+                "is_available": is_available,
+                "unavailable_reason": "OUT_OF_STOCK" if not is_available else None,
                 "image_url": sku_data.get("image_url"),
             })
     return result

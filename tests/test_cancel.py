@@ -53,12 +53,13 @@ def test_unreserve_failure_transitions_to_cancel_pending(client, fake_b2b, db):
     assert response.json()["status"] == "CANCEL_PENDING"
 
 
-def test_cancel_assembling_order_returns_409(client, fake_b2b, db):
+def test_cancel_assembling_order_returns_200(client, fake_b2b, db):
     order, buyer_id = _create_order(db, status="ASSEMBLING")
 
     response = client.post(f"/api/v1/orders/{order.id}/cancel", headers=auth_headers(buyer_id))
 
-    assert response.status_code == 409
+    assert response.status_code == 200
+    assert response.json()["status"] == "CANCELLED"
 
 
 def test_other_user_order_returns_404(client, fake_b2b, db):

@@ -7,7 +7,7 @@ from src.b2b_client import B2BClient, B2BNotFoundError, B2BUnavailableError, get
 
 router = APIRouter(tags=["Catalog"])
 
-VALID_SORT = {"price_asc", "price_desc", "created_at_asc", "created_at_desc", "popularity_desc"}
+VALID_SORT = {"price_asc", "price_desc", "popularity", "new"}
 
 
 def _strip_private(product: dict) -> dict:
@@ -20,7 +20,7 @@ def _strip_private(product: dict) -> dict:
     return result
 
 
-@router.get("/api/v1/products")
+@router.get("/api/v1/catalog/products")
 def list_products(
     sort: str | None = Query(default=None),
     category_id: str | None = Query(default=None),
@@ -58,7 +58,7 @@ def list_products(
         )
 
 
-@router.get("/api/v1/products/{product_id}")
+@router.get("/api/v1/catalog/products/{product_id}")
 def get_product(
     product_id: str,
     b2b: B2BClient = Depends(get_b2b_client),
