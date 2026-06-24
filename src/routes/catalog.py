@@ -7,7 +7,7 @@ from src.b2b_client import B2BClient, B2BNotFoundError, B2BUnavailableError, get
 
 router = APIRouter(tags=["Catalog"])
 
-VALID_SORT = {"price_asc", "price_desc", "popularity", "new"}
+VALID_SORT = {"price_asc", "price_desc", "popular", "created_desc"}
 
 
 def _strip_private(product: dict) -> dict:
@@ -23,11 +23,11 @@ def _strip_private(product: dict) -> dict:
 @router.get("/api/v1/catalog/products")
 def list_products(
     sort: str | None = Query(default=None),
-    category_id: str | None = Query(default=None),
-    min_price: int | None = Query(default=None),
-    max_price: int | None = Query(default=None),
-    page: int = Query(default=1, ge=1),
-    per_page: int = Query(default=20, ge=1, le=100),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    filter_category_id: str | None = Query(default=None, alias="filter[category_id]"),
+    filter_price_min: int | None = Query(default=None, alias="filter[price_min]"),
+    filter_price_max: int | None = Query(default=None, alias="filter[price_max]"),
     ids: str | None = Query(default=None),
     b2b: B2BClient = Depends(get_b2b_client),
 ):
@@ -37,15 +37,15 @@ def list_products(
             content={"code": "INVALID_SORT", "message": f"Invalid sort value: {sort}. Valid: {sorted(VALID_SORT)}"},
         )
 
-    params: dict = {"page": page, "per_page": per_page}
+    params: dict = {"limit": limit, "offset": offset}
     if sort:
         params["sort"] = sort
-    if category_id:
-        params["category_id"] = category_id
-    if min_price is not None:
-        params["min_price"] = min_price
-    if max_price is not None:
-        params["max_price"] = max_price
+    if filter_category_id:
+        params["filter[category_id]"] = filter_category_id
+    if filter_price_min is not None:
+        params["filter[price_min]"] = filter_price_min
+    if filter_price_max is not None:
+        params["filter[price_max]"] = filter_price_max
     if ids:
         params["ids"] = ids
 

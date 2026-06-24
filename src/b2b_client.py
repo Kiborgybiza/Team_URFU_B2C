@@ -48,7 +48,20 @@ class B2BClient:
         return resp.json()
 
     def fetch_facets(self, params: dict[str, Any]) -> dict[str, Any]:
-        return {"facets": []}
+        try:
+            resp = httpx.get(
+                f"{self.base_url}/api/v1/public/facets",
+                headers=self._headers(),
+                params=params,
+                timeout=5.0,
+            )
+        except httpx.HTTPError as e:
+            raise B2BUnavailableError("B2B unavailable") from e
+        if resp.status_code >= 500:
+            raise B2BUnavailableError("B2B unavailable")
+        if not resp.is_success:
+            raise B2BUnavailableError(f"B2B error: {resp.status_code}")
+        return resp.json()
 
     def fetch_product(self, product_id: str) -> dict[str, Any]:
         try:

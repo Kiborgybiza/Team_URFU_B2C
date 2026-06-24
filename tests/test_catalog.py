@@ -68,3 +68,24 @@ def test_b2b_unavailable_returns_502(client, fake_b2b):
 
     assert response.status_code == 502
     assert response.json()["code"] == "B2B_UNAVAILABLE"
+
+
+def test_limit_offset_pagination_accepted(client, fake_b2b):
+    fake_b2b.set_catalog_response([])
+
+    response = client.get("/api/v1/catalog/products", params={"limit": 10, "offset": 20})
+
+    assert response.status_code == 200
+
+
+def test_deep_object_filter_params_accepted(client, fake_b2b):
+    from uuid import uuid4
+    cat_id = str(uuid4())
+    fake_b2b.set_catalog_response([])
+
+    response = client.get(
+        "/api/v1/catalog/products",
+        params={"filter[category_id]": cat_id, "filter[price_min]": 100, "filter[price_max]": 5000},
+    )
+
+    assert response.status_code == 200
