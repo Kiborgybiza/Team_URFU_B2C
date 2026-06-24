@@ -24,8 +24,8 @@ router = APIRouter(tags=["Orders"])
 
 
 class CheckoutRequest(BaseModel):
-    address_id: uuid.UUID | None = None
-    payment_method_id: uuid.UUID | None = None
+    address_id: uuid.UUID
+    payment_method_id: uuid.UUID
 
 
 def _order_out(order: Order) -> dict[str, Any]:
@@ -37,7 +37,7 @@ def _order_out(order: Order) -> dict[str, Any]:
         "delivery_cost": order.delivery_cost,
         "total": order.total,
         "idempotency_key": str(order.idempotency_key),
-        "address": {"id": str(order.address_id)} if order.address_id else None,
+        "address": {"id": str(order.address_id)},
         "payment_method_id": str(order.payment_method_id) if order.payment_method_id else None,
         "created_at": order.created_at.isoformat(),
         "items": [
