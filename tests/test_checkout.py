@@ -101,3 +101,29 @@ def test_b2b_unavailable_returns_503(client, fake_b2b):
 
     assert response.status_code == 503
     assert response.json()["code"] == "B2B_UNAVAILABLE"
+
+
+def test_checkout_without_address_id_returns_422(client, fake_b2b):
+    user_id = str(uuid4())
+    _setup_cart(client, fake_b2b, user_id)
+
+    response = client.post(
+        "/api/v1/orders",
+        json={"payment_method_id": str(uuid4())},
+        headers=_checkout_headers(user_id),
+    )
+
+    assert response.status_code == 422
+
+
+def test_checkout_without_payment_method_id_returns_422(client, fake_b2b):
+    user_id = str(uuid4())
+    _setup_cart(client, fake_b2b, user_id)
+
+    response = client.post(
+        "/api/v1/orders",
+        json={"address_id": str(uuid4())},
+        headers=_checkout_headers(user_id),
+    )
+
+    assert response.status_code == 422
