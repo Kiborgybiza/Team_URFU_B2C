@@ -7,7 +7,9 @@ from src.b2b_client import B2BClient, B2BNotFoundError, B2BUnavailableError, get
 
 router = APIRouter(tags=["Catalog"])
 
-VALID_SORT = {"price_asc", "price_desc", "popular", "created_desc"}
+VALID_SORT = {"price_asc", "price_desc", "popularity", "new"}
+
+_SORT_TO_B2B = {"price_asc": "price_asc", "price_desc": "price_desc", "popularity": "popular", "new": "created_desc"}
 
 
 def _strip_private(product: dict) -> dict:
@@ -39,13 +41,13 @@ def list_products(
 
     params: dict = {"limit": limit, "offset": offset}
     if sort:
-        params["sort"] = sort
+        params["sort"] = _SORT_TO_B2B[sort]
     if filter_category_id:
-        params["filter[category_id]"] = filter_category_id
+        params["category_id"] = filter_category_id
     if filter_price_min is not None:
-        params["filter[price_min]"] = filter_price_min
+        params["min_price"] = filter_price_min
     if filter_price_max is not None:
-        params["filter[price_max]"] = filter_price_max
+        params["max_price"] = filter_price_max
     if ids:
         params["ids"] = ids
 

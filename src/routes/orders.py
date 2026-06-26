@@ -26,6 +26,10 @@ router = APIRouter(tags=["Orders"])
 class CheckoutRequest(BaseModel):
     address_id: uuid.UUID
     payment_method_id: uuid.UUID
+    address_country: str = ""
+    address_city: str = ""
+    address_street: str = ""
+    address_building: str = ""
 
 
 def _order_out(order: Order) -> dict[str, Any]:
@@ -37,7 +41,14 @@ def _order_out(order: Order) -> dict[str, Any]:
         "delivery_cost": order.delivery_cost,
         "total": order.total,
         "idempotency_key": str(order.idempotency_key),
-        "address": {"id": str(order.address_id)},
+        "address": {
+            "id": str(order.address_id),
+            "country": order.address_country or "",
+            "city": order.address_city or "",
+            "street": order.address_street or "",
+            "building": order.address_building or "",
+            "created_at": order.created_at.isoformat(),
+        },
         "payment_method_id": str(order.payment_method_id) if order.payment_method_id else None,
         "created_at": order.created_at.isoformat(),
         "items": [
@@ -86,10 +97,14 @@ def create_order(
             idempotency_key=idempotency_key,
             address_id=request.address_id,
             payment_method_id=request.payment_method_id,
+            address_country=request.address_country,
+            address_city=request.address_city,
+            address_street=request.address_street,
+            address_building=request.address_building,
             b2b=b2b,
         )
     except OrderConflictError as e:
-        return JSONResponse(status_code=409, content={"code": "ORDER_CONFLICT", "message": str(e)})
+        return JSONResponse(status_code=409, content={"code": "RESERVE_FAILED", "message": str(e), "failed_items": e.failed_items})
     except B2BUnavailableError:
         return JSONResponse(status_code=503, content={"code": "B2B_UNAVAILABLE", "message": "B2B service unavailable"})
     return JSONResponse(status_code=201, content=_order_out(order))

@@ -20,7 +20,9 @@ class B2BNotFoundError(B2BError):
 
 
 class B2BReserveConflictError(B2BError):
-    pass
+    def __init__(self, message: str, failed_items: list | None = None) -> None:
+        self.failed_items = failed_items or []
+        super().__init__(message)
 
 
 class B2BClient:
@@ -34,7 +36,7 @@ class B2BClient:
     def fetch_catalog(self, params: dict[str, Any]) -> dict[str, Any]:
         try:
             resp = httpx.get(
-                f"{self.base_url}/api/v1/products",
+                f"{self.base_url}/api/v1/public/products",
                 headers=self._headers(),
                 params=params,
                 timeout=5.0,
@@ -119,7 +121,11 @@ class B2BClient:
         except httpx.HTTPError as e:
             raise B2BUnavailableError("B2B unavailable") from e
         if resp.status_code == 409:
-            raise B2BReserveConflictError("Partial reserve failure")
+            try:
+                body = resp.json()
+            except Exception:
+                body = {}
+            raise B2BReserveConflictError("Partial reserve failure", failed_items=body.get("failed_items", []))
         if not resp.is_success:
             raise B2BUnavailableError("B2B reserve failed")
 
