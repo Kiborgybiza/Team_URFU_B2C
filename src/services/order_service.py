@@ -13,7 +13,9 @@ from src.models import CartItem, Order, OrderItem
 
 
 class OrderConflictError(Exception):
-    pass
+    def __init__(self, message: str, failed_items: list | None = None) -> None:
+        self.failed_items = failed_items or []
+        super().__init__(message)
 
 
 class OrderNotFoundError(Exception):
@@ -39,6 +41,10 @@ def checkout(
     address_id: uuid.UUID | None,
     payment_method_id: uuid.UUID | None,
     b2b: B2BClient,
+    address_country: str = "",
+    address_city: str = "",
+    address_street: str = "",
+    address_building: str = "",
 ) -> Order:
     # Idempotency check first — before any expensive work
     existing = db.scalars(select(Order).where(Order.idempotency_key == idempotency_key)).first()
@@ -79,7 +85,7 @@ def checkout(
     try:
         b2b.reserve(str(idempotency_key), reserve_items, order_id=str(order_id))
     except B2BReserveConflictError as e:
-        raise OrderConflictError("Partial reserve failure") from e
+        raise OrderConflictError("Partial reserve failure", failed_items=e.failed_items) from e
     except B2BUnavailableError:
         raise
 
@@ -93,6 +99,10 @@ def checkout(
         delivery_cost=0,
         total=subtotal,
         address_id=address_id,
+        address_country=address_country,
+        address_city=address_city,
+        address_street=address_street,
+        address_building=address_building,
         payment_method_id=payment_method_id,
     )
     db.add(order)

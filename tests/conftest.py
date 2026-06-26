@@ -103,7 +103,8 @@ class FakeB2BClient(B2BClient):
         if self.b2b_unavailable:
             raise B2BUnavailableError("B2B unavailable")
         if self.reserve_conflict:
-            raise B2BReserveConflictError("Partial reserve failure")
+            failed = [{"sku_id": str(items[0]["sku_id"]), "reason": "INSUFFICIENT_STOCK"}] if items else []
+            raise B2BReserveConflictError("Partial reserve failure", failed_items=failed)
 
     def unreserve(self, order_id: str, items: list[dict[str, Any]]) -> None:
         self.unreserve_calls.append({"order_id": order_id, "items": items})

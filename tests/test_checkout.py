@@ -27,6 +27,10 @@ def _checkout_body(**overrides) -> dict:
     payload: dict = {
         "address_id": str(uuid4()),
         "payment_method_id": str(uuid4()),
+        "address_country": "Russia",
+        "address_city": "Yekaterinburg",
+        "address_street": "Lenina",
+        "address_building": "1",
     }
     payload.update(overrides)
     return payload
@@ -64,6 +68,10 @@ def test_partial_reserve_failure_returns_409(client, fake_b2b):
     )
 
     assert response.status_code == 409
+    body = response.json()
+    assert body["code"] == "RESERVE_FAILED"
+    assert "failed_items" in body
+    assert isinstance(body["failed_items"], list)
 
 
 def test_idempotency_returns_existing_order(client, fake_b2b):
