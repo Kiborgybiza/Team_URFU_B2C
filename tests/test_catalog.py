@@ -29,6 +29,22 @@ def test_catalog_returns_filtered_sorted_products(client, fake_b2b):
     assert data["items"][1]["id"] == p2["id"]
 
 
+def test_catalog_items_have_product_short_schema(client, fake_b2b):
+    p = _product(price=999)
+    fake_b2b.set_catalog_response([p])
+
+    response = client.get("/api/v1/catalog/products")
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["id"] == p["id"]
+    assert item["title"] == p["title"]
+    assert item["image"] == p["images"][0]["url"]
+    assert item["price"] == 999
+    assert item["in_stock"] is True
+    assert "is_in_cart" in item
+
+
 def test_facets_return_counts_per_filter_value(client, fake_b2b):
     cat_id = str(uuid4())
     fake_b2b.set_facets_response({
