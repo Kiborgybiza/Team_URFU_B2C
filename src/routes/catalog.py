@@ -22,6 +22,20 @@ def _strip_private(product: dict) -> dict:
     return result
 
 
+def _to_product_short(product: dict) -> dict:
+    skus = [s for s in product.get("skus", []) if not s.get("deleted", False)]
+    prices = [s["price"] for s in skus if "price" in s]
+    images = product.get("images", [])
+    return {
+        "id": product["id"],
+        "title": product.get("title", ""),
+        "image": images[0]["url"] if images else "",
+        "price": min(prices) if prices else 0,
+        "in_stock": any(s.get("active_quantity", 0) > 0 for s in skus),
+        "is_in_cart": False,
+    }
+
+
 @router.get("/api/v1/catalog/products")
 def list_products(
     sort: str | None = Query(default=None),
@@ -52,12 +66,20 @@ def list_products(
         params["ids"] = ids
 
     try:
-        return b2b.fetch_catalog(params)
+        raw = b2b.fetch_catalog(params)
     except B2BUnavailableError:
         return JSONResponse(
             status_code=502,
             content={"code": "B2B_UNAVAILABLE", "message": "Catalog service unavailable"},
         )
+
+    items = [_to_product_short(p) for p in raw.get("items", [])]
+    return {
+        "total_count": raw.get("total_count", len(items)),
+        "limit": limit,
+        "offset": offset,
+        "items": items,
+    }
 
 
 @router.get("/api/v1/catalog/products/{product_id}")
