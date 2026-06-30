@@ -8,8 +8,9 @@ def _product(price: int = 1000, category_id: str | None = None) -> dict:
         "title": "Test Product",
         "description": "Description",
         "status": "MODERATED",
+        "seller_id": str(uuid4()),
         "category": {"id": category_id or str(uuid4()), "name": "Electronics"},
-        "images": [{"url": "/s3/img.jpg", "ordering": 0}],
+        "images": [{"id": str(uuid4()), "url": "/s3/img.jpg", "ordering": 0}],
         "skus": [{"id": str(uuid4()), "name": "base", "price": price, "active_quantity": 5}],
     }
 
@@ -29,7 +30,12 @@ def test_catalog_returns_filtered_sorted_products(client, fake_b2b):
     assert data["items"][1]["id"] == p2["id"]
 
 
-def test_catalog_items_have_product_short_schema(client, fake_b2b):
+def test_catalog_items_match_catalog_product_card_schema(client, fake_b2b):
+    """Each item must conform to CatalogProductCard from b2c/openapi.yaml.
+
+    required: [id, name, min_price, has_stock, images]; images is an array of
+    ImageRef objects ({id, url, ordering}), NOT a bare string.
+    """
     p = _product(price=999)
     fake_b2b.set_catalog_response([p])
 
@@ -37,12 +43,23 @@ def test_catalog_items_have_product_short_schema(client, fake_b2b):
 
     assert response.status_code == 200
     item = response.json()["items"][0]
+
+    # Every required field, under the spec name and type.
     assert item["id"] == p["id"]
-    assert item["title"] == p["title"]
-    assert item["image"] == p["images"][0]["url"]
-    assert item["price"] == 999
-    assert item["in_stock"] is True
-    assert "is_in_cart" in item
+    assert item["name"] == p["title"]
+    assert item["min_price"] == 999
+    assert isinstance(item["min_price"], int)
+    assert item["has_stock"] is True
+
+    assert isinstance(item["images"], list)
+    first_image = item["images"][0]
+    assert isinstance(first_image, dict)
+    assert first_image["url"] == p["images"][0]["url"]
+    assert "ordering" in first_image
+
+    # Legacy / off-contract names must be gone.
+    for legacy in ("title", "price", "in_stock", "is_in_cart", "image"):
+        assert legacy not in item
 
 
 def test_facets_return_counts_per_filter_value(client, fake_b2b):

@@ -22,18 +22,43 @@ def _strip_private(product: dict) -> dict:
     return result
 
 
-def _to_product_short(product: dict) -> dict:
-    skus = [s for s in product.get("skus", []) if not s.get("deleted", False)]
-    prices = [s["price"] for s in skus if "price" in s]
-    images = product.get("images", [])
-    return {
-        "id": product["id"],
-        "title": product.get("title", ""),
-        "image": images[0]["url"] if images else "",
-        "price": min(prices) if prices else 0,
-        "in_stock": any(s.get("active_quantity", 0) > 0 for s in skus),
-        "is_in_cart": False,
+def _image_ref(img: dict) -> dict:
+    """Map a B2B image into the openapi ImageRef shape (id, url, ordering)."""
+    ref = {
+        "id": img.get("id"),
+        "url": img.get("url", ""),
+        "ordering": img.get("ordering", 0),
     }
+    if img.get("alt") is not None:
+        ref["alt"] = img["alt"]
+    if img.get("is_main") is not None:
+        ref["is_main"] = img["is_main"]
+    return ref
+
+
+def _to_catalog_card(product: dict) -> dict:
+    """Transform a raw B2B product into the b2c openapi CatalogProductCard schema.
+
+    Required fields per spec: id, name, min_price, has_stock, images.
+    """
+    skus = [s for s in product.get("skus", []) if not s.get("deleted", False)]
+    in_stock_skus = [s for s in skus if s.get("active_quantity", 0) > 0]
+    priced = [s["price"] for s in (in_stock_skus or skus) if s.get("price") is not None]
+
+    card: dict = {
+        "id": product["id"],
+        "name": product.get("title") or product.get("name") or "",
+        "min_price": min(priced) if priced else 0,
+        "has_stock": bool(in_stock_skus),
+        "images": [_image_ref(i) for i in (product.get("images") or [])],
+    }
+    if product.get("slug"):
+        card["slug"] = product["slug"]
+    if product.get("category"):
+        card["category"] = product["category"]
+    if product.get("seller_id"):
+        card["seller"] = {"id": str(product["seller_id"])}
+    return card
 
 
 @router.get("/api/v1/catalog/products")
@@ -73,12 +98,12 @@ def list_products(
             content={"code": "B2B_UNAVAILABLE", "message": "Catalog service unavailable"},
         )
 
-    items = [_to_product_short(p) for p in raw.get("items", [])]
+    items = [_to_catalog_card(p) for p in raw.get("items", [])]
     return {
+        "items": items,
         "total_count": raw.get("total_count", len(items)),
         "limit": limit,
         "offset": offset,
-        "items": items,
     }
 
 
