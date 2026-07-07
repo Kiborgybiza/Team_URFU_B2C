@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import NAMESPACE_URL, uuid5
+
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 
@@ -22,48 +24,45 @@ def _strip_private(product: dict) -> dict:
     return result
 
 
-def _image_ref(img: dict) -> dict:
-    """Map a B2B image into the openapi ImageRef shape (id, url, ordering)."""
-    ref = {
-        "id": img.get("id"),
-        "url": img.get("url", ""),
-        "ordering": img.get("ordering", 0),
-    }
-    if img.get("alt") is not None:
-        ref["alt"] = img["alt"]
-    if img.get("is_main") is not None:
-        ref["is_main"] = img["is_main"]
-    return ref
+def _cover_images(product: dict) -> list[dict]:
+    """Build CatalogProductCard.images from the Short response `cover_image`.
+
+    The B2B list response carries a single nullable `cover_image` URL, not an
+    images array, so the card shows at most that one image.
+    """
+    cover = product.get("cover_image")
+    if not cover:
+        return []
+    # ImageRef requires a uuid id, but the Short response only carries a URL, so
+    # derive a stable id from it (deterministic, no randomness).
+    return [{"id": str(uuid5(NAMESPACE_URL, cover)), "url": cover, "ordering": 0, "is_main": True}]
 
 
 def _to_catalog_card(product: dict) -> dict:
-    """Transform a raw B2B product into the b2c openapi CatalogProductCard schema.
+    """Transform a B2B ProductPublicShortResponse item into CatalogProductCard.
 
-    Required fields per spec: id, name, min_price, has_stock, images.
+    The B2B public list (`GET /api/v1/public/products`) returns the SHORT form:
+    id, title, slug, status, category_id, min_price, cover_image, created_at —
+    no `skus`, no `images` array. Values are taken from those fields directly.
+    Required per b2c openapi: id, name, min_price, has_stock, images.
     """
-    skus = [s for s in product.get("skus", []) if not s.get("deleted", False)]
-    in_stock_skus = [s for s in skus if s.get("active_quantity", 0) > 0]
-    priced = [s["price"] for s in (in_stock_skus or skus) if s.get("price") is not None]
-
     card: dict = {
         "id": product["id"],
         "name": product.get("title") or product.get("name") or "",
-        "min_price": min(priced) if priced else 0,
-        "has_stock": bool(in_stock_skus),
-        "images": [_image_ref(i) for i in (product.get("images") or [])],
+        "min_price": product.get("min_price") or 0,
+        # The B2B list returns only MODERATED products that have at least one
+        # in-stock SKU, so every item present in the list is in stock.
+        "has_stock": True,
+        "images": _cover_images(product),
     }
     if product.get("slug"):
         card["slug"] = product["slug"]
-    if product.get("category"):
-        card["category"] = product["category"]
-    if product.get("seller_id"):
-        card["seller"] = {"id": str(product["seller_id"])}
     return card
 
 
 @router.get("/api/v1/catalog/products")
 def list_products(
-    sort: str | None = Query(default=None),
+    sort: str = Query(default="popularity"),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     filter_category_id: str | None = Query(default=None, alias="filter[category_id]"),
@@ -72,15 +71,15 @@ def list_products(
     ids: str | None = Query(default=None),
     b2b: B2BClient = Depends(get_b2b_client),
 ):
-    if sort is not None and sort not in VALID_SORT:
+    if sort not in VALID_SORT:
         return JSONResponse(
             status_code=400,
             content={"code": "INVALID_SORT", "message": f"Invalid sort value: {sort}. Valid: {sorted(VALID_SORT)}"},
         )
 
-    params: dict = {"limit": limit, "offset": offset}
-    if sort:
-        params["sort"] = _SORT_TO_B2B[sort]
+    # Spec default is popularity; always forward a sort so B2B does not fall
+    # back to its own default (created_desc).
+    params: dict = {"limit": limit, "offset": offset, "sort": _SORT_TO_B2B[sort]}
     if filter_category_id:
         params["category_id"] = filter_category_id
     if filter_price_min is not None:
