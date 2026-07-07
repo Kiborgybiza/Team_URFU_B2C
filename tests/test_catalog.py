@@ -1,23 +1,29 @@
 from uuid import uuid4
 
 
-def _product(price: int = 1000, category_id: str | None = None) -> dict:
+def _product(min_price: int = 1000, category_id: str | None = None) -> dict:
+    """A B2B ProductPublicShortResponse item, exactly as the list endpoint returns.
+
+    Deliberately has NO `skus` and NO `images` array — only the Short-form fields.
+    A mapper that reads those non-existent keys will produce min_price=0/has_stock=
+    False/empty images and fail the schema test below.
+    """
     pid = str(uuid4())
     return {
         "id": pid,
         "title": "Test Product",
-        "description": "Description",
+        "slug": "test-product",
         "status": "MODERATED",
-        "seller_id": str(uuid4()),
-        "category": {"id": category_id or str(uuid4()), "name": "Electronics"},
-        "images": [{"id": str(uuid4()), "url": "/s3/img.jpg", "ordering": 0}],
-        "skus": [{"id": str(uuid4()), "name": "base", "price": price, "active_quantity": 5}],
+        "category_id": category_id or str(uuid4()),
+        "min_price": min_price,
+        "cover_image": "/s3/img.jpg",
+        "created_at": "2026-01-01T00:00:00Z",
     }
 
 
 def test_catalog_returns_filtered_sorted_products(client, fake_b2b):
-    p1 = _product(price=500)
-    p2 = _product(price=1500)
+    p1 = _product(min_price=500)
+    p2 = _product(min_price=1500)
     fake_b2b.set_catalog_response([p1, p2])
 
     response = client.get("/api/v1/catalog/products", params={"sort": "price_asc"})
@@ -31,12 +37,13 @@ def test_catalog_returns_filtered_sorted_products(client, fake_b2b):
 
 
 def test_catalog_items_match_catalog_product_card_schema(client, fake_b2b):
-    """Each item must conform to CatalogProductCard from b2c/openapi.yaml.
+    """Each item must conform to CatalogProductCard, built from the Short response.
 
-    required: [id, name, min_price, has_stock, images]; images is an array of
-    ImageRef objects ({id, url, ordering}), NOT a bare string.
+    required: [id, name, min_price, has_stock, images]. Values come from the B2B
+    Short fields: name<-title, min_price<-min_price, images<-cover_image. The
+    fixture has no `skus`/`images` keys, so a mapper that reads them fails here.
     """
-    p = _product(price=999)
+    p = _product(min_price=999)
     fake_b2b.set_catalog_response([p])
 
     response = client.get("/api/v1/catalog/products")
@@ -47,14 +54,17 @@ def test_catalog_items_match_catalog_product_card_schema(client, fake_b2b):
     # Every required field, under the spec name and type.
     assert item["id"] == p["id"]
     assert item["name"] == p["title"]
-    assert item["min_price"] == 999
+    assert item["min_price"] == 999  # taken from the Short `min_price`, not skus
     assert isinstance(item["min_price"], int)
     assert item["has_stock"] is True
 
+    # images is an array of ImageRef objects built from the single `cover_image`
+    # URL (required ImageRef fields: id, url, ordering).
     assert isinstance(item["images"], list)
     first_image = item["images"][0]
     assert isinstance(first_image, dict)
-    assert first_image["url"] == p["images"][0]["url"]
+    assert first_image["url"] == p["cover_image"]
+    assert "id" in first_image
     assert "ordering" in first_image
 
     # Legacy / off-contract names must be gone.
