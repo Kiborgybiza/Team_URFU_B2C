@@ -120,18 +120,66 @@ def get_product(
     return _strip_private(product)
 
 
+def _compute_facets(products: list[dict], category_id: str | None = None) -> dict:
+    """Aggregate characteristic value counts across the given products.
+
+    Facets are computed here on the B2C side from the public product data B2B
+    already exposes (product- and SKU-level ``characteristics``), because there is
+    no facets endpoint in the B2B contract. Each count is the number of products
+    that carry a given characteristic value (a product is counted once per value,
+    even if several of its SKUs repeat it).
+    """
+    counts: dict[str, dict[str, int]] = {}
+    order: list[str] = []
+    for product in products:
+        pairs: set[tuple[str, str]] = set()
+        chars = list(product.get("characteristics") or [])
+        for sku in product.get("skus") or []:
+            chars.extend(sku.get("characteristics") or [])
+        for c in chars:
+            name, value = c.get("name"), c.get("value")
+            if name and value is not None:
+                pairs.add((name, value))
+        for name, value in pairs:
+            if name not in counts:
+                counts[name] = {}
+                order.append(name)
+            counts[name][value] = counts[name].get(value, 0) + 1
+
+    facets = [
+        {
+            "field": name,
+            "values": [
+                {"value": value, "label": value, "count": cnt}
+                for value, cnt in sorted(counts[name].items(), key=lambda kv: (-kv[1], kv[0]))
+            ],
+        }
+        for name in order
+    ]
+    result: dict = {"facets": facets}
+    if category_id:
+        result["category_id"] = category_id
+    return result
+
+
 @router.get("/api/v1/catalog/facets")
 def get_facets(
     category_id: str | None = Query(default=None),
     b2b: B2BClient = Depends(get_b2b_client),
 ):
-    params: dict = {}
+    # No facets endpoint exists in the B2B contract, so compute them on the B2C
+    # side: take the in-scope product ids from the public list, then fetch the
+    # full public cards (which carry characteristics) and aggregate.
+    params: dict = {"limit": 100, "offset": 0}
     if category_id:
         params["category_id"] = category_id
     try:
-        return b2b.fetch_facets(params)
+        listing = b2b.fetch_catalog(params)
+        ids = [p["id"] for p in listing.get("items", []) if p.get("id")]
+        products = b2b.fetch_products_batch(ids)
     except B2BUnavailableError:
         return JSONResponse(
             status_code=502,
             content={"code": "B2B_UNAVAILABLE", "message": "Catalog service unavailable"},
         )
+    return _compute_facets(products, category_id)

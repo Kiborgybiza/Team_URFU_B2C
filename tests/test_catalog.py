@@ -72,29 +72,64 @@ def test_catalog_items_match_catalog_product_card_schema(client, fake_b2b):
         assert legacy not in item
 
 
-def test_facets_return_counts_per_filter_value(client, fake_b2b):
-    cat_id = str(uuid4())
-    fake_b2b.set_facets_response({
-        "facets": [
+def _full_product(category_id: str, brand: str, color: str = "black") -> dict:
+    """A full B2B public product (as /public/products/batch returns) with characteristics."""
+    pid = str(uuid4())
+    return {
+        "id": pid,
+        "title": "Test Product",
+        "slug": "test-product",
+        "status": "MODERATED",
+        "category_id": category_id,
+        "characteristics": [{"id": str(uuid4()), "name": "brand", "value": brand}],
+        "skus": [
             {
-                "field": "category_id",
-                "values": [
-                    {"value": cat_id, "label": "Electronics", "count": 5},
-                    {"value": str(uuid4()), "label": "Clothing", "count": 3},
-                ],
+                "id": str(uuid4()),
+                "name": "base",
+                "price": 1000,
+                "active_quantity": 3,
+                "characteristics": [{"id": str(uuid4()), "name": "color", "value": color}],
             }
-        ]
-    })
+        ],
+    }
 
-    response = client.get("/api/v1/catalog/facets")
+
+def test_facets_return_counts_per_filter_value(client, fake_b2b):
+    """Facets are really computed from B2B characteristics, not a canned response."""
+    cat_id = str(uuid4())
+    products = [
+        _full_product(cat_id, "Apple"),
+        _full_product(cat_id, "Apple"),
+        _full_product(cat_id, "Samsung"),
+    ]
+    for p in products:
+        fake_b2b.add_product(p)
+    # The public list only yields ids; the batch call yields the full cards.
+    fake_b2b.set_catalog_response([{"id": p["id"]} for p in products])
+
+    response = client.get("/api/v1/catalog/facets", params={"category_id": cat_id})
 
     assert response.status_code == 200
     data = response.json()
     assert "facets" in data
-    assert len(data["facets"]) >= 1
+
+    brand_facet = next(f for f in data["facets"] if f["field"] == "brand")
+    brand_counts = {v["value"]: v["count"] for v in brand_facet["values"]}
+    assert brand_counts == {"Apple": 2, "Samsung": 1}
+
+    # Every facet value carries a count (also covers the SKU-level "color" facet).
     for facet in data["facets"]:
         for val in facet["values"]:
             assert "count" in val
+
+
+def test_facets_b2b_unavailable_returns_502(client, fake_b2b):
+    fake_b2b.b2b_unavailable = True
+
+    response = client.get("/api/v1/catalog/facets")
+
+    assert response.status_code == 502
+    assert response.json()["code"] == "B2B_UNAVAILABLE"
 
 
 def test_invalid_sort_returns_400(client, fake_b2b):

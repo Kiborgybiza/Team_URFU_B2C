@@ -41,7 +41,6 @@ class FakeB2BClient(B2BClient):
     def __init__(self) -> None:
         self._products: dict[str, dict[str, Any]] = {}
         self._catalog_response: dict[str, Any] = {"items": []}
-        self._facets_response: dict[str, Any] = {"facets": []}
         self._blocked_ids: set[str] = set()
         self.catalog_unavailable: bool = False
         self.b2b_unavailable: bool = False
@@ -59,18 +58,15 @@ class FakeB2BClient(B2BClient):
     def set_catalog_response(self, items: list[dict[str, Any]]) -> None:
         self._catalog_response = {"items": items}
 
-    def set_facets_response(self, response: dict[str, Any]) -> None:
-        self._facets_response = response
-
     def fetch_catalog(self, params: dict[str, Any]) -> dict[str, Any]:
         if self.catalog_unavailable or self.b2b_unavailable:
             raise B2BUnavailableError("B2B unavailable")
         return self._catalog_response
 
-    def fetch_facets(self, params: dict[str, Any]) -> dict[str, Any]:
+    def fetch_products_batch(self, product_ids: list[str]) -> list[dict[str, Any]]:
         if self.b2b_unavailable:
             raise B2BUnavailableError("B2B unavailable")
-        return self._facets_response
+        return [self._products[pid] for pid in product_ids if pid in self._products]
 
     def fetch_product(self, product_id: str) -> dict[str, Any]:
         if self.b2b_unavailable:
