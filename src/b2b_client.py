@@ -49,12 +49,15 @@ class B2BClient:
             raise B2BUnavailableError(f"B2B error: {resp.status_code}")
         return resp.json()
 
-    def fetch_facets(self, params: dict[str, Any]) -> dict[str, Any]:
+    def fetch_products_batch(self, product_ids: list[str]) -> list[dict[str, Any]]:
+        """Full public product cards for the given ids via POST /public/products/batch."""
+        if not product_ids:
+            return []
         try:
-            resp = httpx.get(
-                f"{self.base_url}/api/v1/public/facets",
+            resp = httpx.post(
+                f"{self.base_url}/api/v1/public/products/batch",
                 headers=self._headers(),
-                params=params,
+                json={"product_ids": product_ids},
                 timeout=5.0,
             )
         except httpx.HTTPError as e:
